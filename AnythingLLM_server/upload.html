@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>AnythingLLM 文档上传</title>
+<style>
+  body{font-family:system-ui,Segoe UI,sans-serif;max-width:560px;margin:40px auto;padding:0 16px;color:#222}
+  h1{font-size:20px}
+  .box{background:#f6f8fa;border:1px solid #e1e4e8;border-radius:8px;padding:16px;margin:16px 0}
+  button{background:#2ea44f;color:#fff;border:0;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:14px}
+  button:disabled{background:#94d3a2;cursor:not-allowed}
+  #status{white-space:pre-wrap;font-size:13px;line-height:1.6}
+  .ok{color:#2ea44f}.err{color:#cf222e}.info{color:#0969da}
+  input[type=file]{margin:8px 0}
+</style>
+</head>
+<body>
+<h1>AnythingLLM 文档上传（第一个工作区）</h1>
+<div class="box">
+  <div>目标工作区：<span id="ws" class="info">加载中…</span></div>
+  <input type="file" id="file">
+  <br>
+  <button id="btn" disabled>上传并嵌入</button>
+</div>
+<div class="box"><div id="status">就绪。</div></div>
+
+<script>
+// ★ 可替换配置
+const CONFIG = {
+  baseURL: "http://localhost:3001/api",
+  apiKey:  "V53PXSX-EGNMHT0-JX65W10-9PW5GJE",
+};
+const auth = { Authorization: "Bearer " + CONFIG.apiKey };
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls) => { $("status").innerHTML += (cls ? `<span class="${cls}">${msg}</span>` : msg) + "\n"; };
+
+let firstSlug = null;
+
+async function init() {
+  try {
+    const r = await fetch(CONFIG.baseURL + "/v1/workspaces", { headers: auth });
+    const d = await r.json();
+    const ws = (d.workspaces || [])[0];
+    if (!ws) { log("无工作区", "err"); return; }
+    firstSlug = ws.slug;
+    $("ws").textContent = `${ws.name}（slug: ${ws.slug}）`;
+    $("btn").disabled = false;
+  } catch (e) {
+    log("获取工作区失败：" + e, "err");
+  }
+}
+
+$("btn").onclick = async () => {
+  const file = $("file").files[0];
+  if (!file) { log("请先选择文件", "err"); return; }
+  $("btn").disabled = true;
+  log(`上传中：${file.name} …`, "info");
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    // 1. 上传文档
+    const r = await fetch(CONFIG.baseURL + "/v1/document/upload", {
+      method: "POST",
+      headers: auth,
+      body: fd,
+    });
+    const d = await r.json();
+    if (!r.ok || d.success === false) throw new Error(d.error || ("HTTP " + r.status));
+    const loc = (d.documents && d.documents[0] && d.documents[0].location);
+    if (!loc) throw new Error("上传返回中缺少文档 location");
+    log(`上传成功：${file.name}`, "ok");
+    // 2. 触发向量化嵌入到第一个工作区
+    log("提交向量化嵌入…", "info");
+    const e = await fetch(CONFIG.baseURL + "/v1/workspace/" + firstSlug + "/update-embeddings", {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ adds: [loc] }),
+    });
+    if (!e.ok) throw new Error("嵌入请求 HTTP " + e.status);
+    await waitEmbedding();
+  } catch (e) {
+    log("失败：" + e.message, "err");
+  } finally {
+    $("btn").disabled = false;
+  }
+};
+
+// 轮询工作区，确认文档已嵌入
+async function waitEmbedding() {
+  log("等待向量化嵌入…", "info");
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const r = await fetch(CONFIG.baseURL + "/v1/workspace/" + firstSlug, { headers: auth });
+      const d = await r.json();
+      const w = Array.isArray(d.workspace) ? d.workspace[0] : d.workspace;
+      const docs = (w && w.documents) || [];
+      if (docs.length) { log(`嵌入完成，工作区现有 ${docs.length} 个文档`, "ok"); return; }
+    } catch (e) { /* 忽略轮询错误，继续 */ }
+  }
+  log("轮询超时：上传已成功，但嵌入未在预期时间内完成", "err");
+}
+
+init();
+</script>
+</body>
+</html>
