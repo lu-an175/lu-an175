@@ -31,6 +31,7 @@ from .tools import (
     run_cli,
 )
 from .skills import load_skill
+from .context import recall_context
 
 
 # ---------- 工具注册表（兼容旧版 dict-of-dict 结构） ----------
@@ -134,6 +135,17 @@ TOOL_META: Dict[str, ToolInfo] = {
             "filename": "str: 需要加载的 Skill 文件路径或名称（可选）",
         },
     ),
+    "recallContext": ToolInfo(
+        name="recallContext",
+        description=(
+            "检索已归档的历史上下文（上下文压缩前的原始对话）。"
+            "当摘要缺少某些细节时用它找回原文，返回片段、归档编号和位置"
+        ),
+        parameters={
+            "text": "str: 要查找的关键词或文本内容，多个词用空格分隔（必需）",
+            "id": "str: 指定归档编号，如 20261022-153000；不传则检索所有归档（可选）",
+        },
+    ),
 }
 
 # 工具函数绑定
@@ -152,6 +164,7 @@ TOOL_FUNCS: Dict[str, Callable[..., dict]] = {
     "fetchWeb": fetch_web,
     "runCli": run_cli,
     "loadSkill": load_skill,
+    "recallContext": recall_context,
 }
 
 # 兼容旧版 TOOLS dict 格式

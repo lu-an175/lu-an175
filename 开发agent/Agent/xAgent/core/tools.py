@@ -412,7 +412,7 @@ def search_web(query: str, top_k: int = 10) -> dict:
     if not CONFIG_INI.exists():
         return _search_error(
             f"缺少配置文件：{CONFIG_INI}。"
-            f"请在 [qianfan] 段落下配置 baidu_qianfan_api_key。"
+            f"请在 [llm] 段落下配置 api_key（旧格式 [qianfan] baidu_qianfan_api_key 仍兼容）。"
         )
 
     try:
@@ -422,7 +422,7 @@ def search_web(query: str, top_k: int = 10) -> dict:
 
     if not api_key:
         return _search_error(
-            f"配置项缺失：{CONFIG_INI} 中 [qianfan] baidu_qianfan_api_key 为空。"
+            f"配置项缺失：{CONFIG_INI} 中 [llm] api_key 为空。"
             f"请填写千帆 API Key 后重试。"
         )
 

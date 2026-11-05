@@ -1,5 +1,11 @@
 # 凭据配置文件（含 API Key，禁止提交）
+# 新版把 config.ini 放在「运行时的项目目录」，所以按位置通配
+config.ini
 Agent/xAgent/core/config.ini
+
+# xAgent 运行时产物（会话历史 / 上下文归档 / 导出）
+Agent/.agents/
+.agents/
 
 # Python
 __pycache__/

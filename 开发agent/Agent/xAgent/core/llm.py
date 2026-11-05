@@ -129,12 +129,28 @@ class MockProvider:
 
     def __init__(self) -> None:
         self._counter = 0
+        #: Mock 没有真实 usage，上下文计量会退回本地估算
+        self.last_usage: Optional[Dict[str, Any]] = None
 
     def chat(
         self,
         messages: List[LLMMessage],
         tools_schema: List[Dict[str, Any]],
     ) -> LLMMessage:
+        # 上下文压缩请求：不按关键词选工具，直接给一份占位摘要，方便无 Key 演示
+        if messages and messages[0].role == "system" and "上下文管理助手" in (messages[0].content or ""):
+            return LLMMessage(role="assistant", content=self._mock_summary(messages))
+
+        # 工具结果已经回来了：直接收尾。
+        # 否则「按最后一条 user 消息选工具」会把同一个工具反复触发到调用上限。
+        if messages and messages[-1].role == "tool":
+            raw = (messages[-1].content or "").strip()
+            preview = raw if len(raw) <= 300 else raw[:297] + "..."
+            return LLMMessage(
+                role="assistant",
+                content=f"工具执行完成，结果如下：\n\n{preview}",
+            )
+
         # 取最后一条 user 消息做关键词匹配
         last_user = ""
         for m in reversed(messages):
@@ -248,6 +264,23 @@ class MockProvider:
             tool_calls=[ToolCall(id=call_id, name=tool_name, arguments=args)],
         )
 
+    def _mock_summary(self, messages: List[LLMMessage]) -> str:
+        """压缩请求的占位摘要 —— 没有 API Key 时也能把 /compact 流程走完。"""
+        transcript = messages[-1].content if messages else ""
+        lines = [line for line in transcript.splitlines() if line.strip()]
+        return (
+            "## 1. 用户目标与要求\n"
+            "- （MockProvider 占位摘要，未真实调用模型）\n\n"
+            "## 2. 已经完成的工作\n"
+            f"- 本轮被压缩的历史共 {max(len(lines) - 1, 0)} 行对话记录。\n\n"
+            "## 3. 当前工作状态\n"
+            "- 上下文已按流程归档并压缩，可继续新的对话。\n\n"
+            "## 4. 关键技术信息\n"
+            "- 如需原始细节，请调用 recallContext 工具按关键词检索归档文件。\n\n"
+            "## 5. 下一步任务\n"
+            "- 继续用户的新指令；缺失信息时先检索归档再回答。"
+        )
+
 
 _DEFAULT_ARG_FALLBACK: Dict[str, Dict[str, Any]] = {
     "list_directory": {"path": "."},
@@ -284,10 +317,15 @@ class OpenAICompatibleProvider:
         api_key: str,
         base_url: str = "https://api.deepseek.com/v1",
         model: str = "deepseek-chat",
+        timeout: int = 60,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        #: 单次请求超时（秒），来自 config.ini [llm] timeout
+        self.timeout = max(3, int(timeout or 60))
+        #: 上一次请求的 usage（含 prompt_tokens），上下文计量优先用它
+        self.last_usage: Optional[Dict[str, Any]] = None
 
     def chat(
         self,
@@ -305,22 +343,31 @@ class OpenAICompatibleProvider:
         payload: Dict[str, Any] = {
             "model": self.model,
             "messages": [_to_api_msg(m) for m in messages],
-            "tools": tools_schema,
-            "tool_choice": "auto",
         }
+        # 压缩上下文时不带 any 工具：空数组有些兼容接口会直接报错
+        if tools_schema:
+            payload["tools"] = tools_schema
+            payload["tool_choice"] = "auto"
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
         req = urllib.request.Request(url, data=data, headers=headers)
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "ignore")[:400]
             raise RuntimeError(
                 f"HTTP {exc.code} {exc.reason} | {detail}"
             ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"网络请求失败：{exc.reason}") from exc
+        except TimeoutError as exc:
+            raise RuntimeError(f"请求超时（{self.timeout}s）") from exc
 
         choice = body["choices"][0]["message"]
+        # 记下本次请求的真实 Token 用量（上下文计量优先用它，比估算准）
+        usage = body.get("usage") or {}
+        self.last_usage = usage if usage else None
         tool_calls: List[ToolCall] | None = None
         if choice.get("tool_calls"):
             tool_calls = [

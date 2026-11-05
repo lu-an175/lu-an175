@@ -112,9 +112,32 @@ def cmd_demo() -> int:
 
 
 def cmd_tui() -> int:
-    from xAgent.tui import FileOpsApp
-    FileOpsApp().run()
+    from xAgent.tui import XAgentApp
+
+    XAgentApp().run()
     return 0
+
+
+def bootstrap_config() -> None:
+    """
+    启动前确保「当前目录」有 config.ini。
+
+    没有就生成一份 mock 模板 —— TUI 会弹窗提示用户改完重启；
+    这次运行照样能进界面（Mock 模式），不至于连程序都跑不起来。
+    """
+    from xAgent.core.config import ensure_config_file, reload_config
+
+    bootstrap = ensure_config_file()
+    reload_config(bootstrap.path if bootstrap.created else None)
+
+    if bootstrap.error:
+        print(f"[xAgent] {bootstrap.error}")
+    elif bootstrap.created:
+        print(f"[xAgent] 已创建配置文件：{bootstrap.path}")
+        if bootstrap.seeded_from:
+            print(f"[xAgent] 已从旧配置迁移 API Key：{bootstrap.seeded_from}")
+        else:
+            print("[xAgent] 当前为 Mock 模式，请填写 [llm] api_key 后重启以接入真实模型。")
 
 
 # ---------- 入口 ----------
@@ -129,17 +152,22 @@ xAgent — 文件操作 Agent（Core + TUI 架构）
   python main.py --list         列出所有工具
   python main.py --run <tool> [key=val ...]   直接调用工具
   python main.py -h | --help    显示帮助
+
+首次运行会在当前目录生成 config.ini（mock 配置），修改后重启生效。
 """
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
 
-    if not argv or argv[0] in ("--tui", "-tui"):
-        return cmd_tui()
-    if argv[0] in ("-h", "--help"):
+    if argv and argv[0] in ("-h", "--help"):
         print(HELP_TEXT)
         return 0
+
+    bootstrap_config()
+
+    if not argv or argv[0] in ("--tui", "-tui"):
+        return cmd_tui()
     if argv[0] == "--demo":
         return cmd_demo()
     if argv[0] == "--list":

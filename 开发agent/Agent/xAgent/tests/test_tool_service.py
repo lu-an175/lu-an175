@@ -64,12 +64,12 @@ class TestToolResult(unittest.TestCase):
 class TestToolInfo(unittest.TestCase):
     """ToolInfo 元数据完整性。"""
 
-    def test_all_10_tools_have_metadata(self):
+    def test_all_tools_have_metadata(self):
         all_tools = {
             "get_current_working_directory", "list_directory", "get_file_type",
             "read_file", "create_file", "write_file", "create_directory",
             "delete_directory", "delete_file", "rename_item", "searchWeb",
-            "fetchWeb", "runCli", "loadSkill",
+            "fetchWeb", "runCli", "loadSkill", "recallContext",
         }
         self.assertEqual(set(TOOL_META.keys()), all_tools)
         self.assertEqual(set(TOOL_FUNCS.keys()), all_tools)
@@ -92,7 +92,7 @@ class TestToolServiceFacade(unittest.TestCase):
 
     def test_list_tools(self):
         tools = ToolService.list_tools()
-        self.assertEqual(len(tools), 14)
+        self.assertEqual(len(tools), 15)
         self.assertTrue(all(isinstance(t, ToolInfo) for t in tools))
 
     def test_get_tool_info(self):
@@ -301,7 +301,7 @@ class TestSearchWeb(unittest.TestCase):
         self._write_ini("[qianfan]\n")
         r = ToolService.call("searchWeb", query="天气")
         self.assertFalse(r.success)
-        self.assertIn("baidu_qianfan_api_key", r.error)
+        self.assertIn("api_key", r.error)
 
     def test_network_failure(self):
         self._write_ini("[qianfan]\nbaidu_qianfan_api_key = test-key\n")
