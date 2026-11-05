@@ -1,0 +1,6 @@
+# xAgent — 文件操作 Agent 依赖
+# core 层基础能力仅用标准库；联网抓取需要系统 curl + trafilatura
+# tui 层需要 Textual
+
+textual>=8.0
+trafilatura>=2.0

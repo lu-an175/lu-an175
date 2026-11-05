@@ -1,9 +1,9 @@
 """MCP server assembly.
 
-Builds an :class:`MCPServer` (SDK 2.x high-level server), registers the
-``list_pets`` tool against an injectable :class:`PetHospitalClient`, and
-mounts it under a stateless Streamable HTTP transport with a ``/health``
-endpoint next to ``/mcp``.
+Builds an :class:`MCPServer` (SDK 2.x high-level server), registers every
+tool in :mod:`pet_hospital_mcp.tools` against an injectable
+:class:`PetHospitalClient`, and mounts it under a stateless Streamable
+HTTP transport with a ``/health`` endpoint next to ``/mcp``.
 
 No ``initialize`` handshake, no ``Mcp-Session-Id``, no session store, no
 ``max_sessions``: the 2026-07-28 protocol revision is stateless by
@@ -22,16 +22,20 @@ from mcp.server import MCPServer
 from .config import Settings, load_settings
 from .logging_config import setup_logging
 from .rest_client import PetHospitalClient
-from .tools.list_pets import register_list_pets
+from .tools import REGISTERERS
 
 logger = logging.getLogger("pet_hospital_mcp.server")
 
 SERVER_NAME = "pet-hospital-mcp"
 SERVER_INSTRUCTIONS = (
     "Pet Hospital MCP service. Exposes the Go Pet Hospital REST API "
-    "as MCP tools. Currently provides one tool: list_pets, which lists "
-    "and filters pet records via GET /api/v1/pets."
+    "as MCP tools. Tools: list_pets (browse/filter/search), get_pet "
+    "(one record), get_pet_summary (cost and visit rollup), get_stats "
+    "(clinic-wide statistics), create_pet, update_pet, delete_pet, "
+    "add_medical_record and add_charge. Look up an id with list_pets "
+    "before calling anything that needs one."
 )
+
 
 
 def create_mcp_server() -> MCPServer:
@@ -59,7 +63,8 @@ def create_app(settings: Settings | None = None) -> tuple[object, PetHospitalCli
 
     mcp = create_mcp_server()
     client = build_client(settings)
-    register_list_pets(mcp, client)
+    for register in REGISTERERS:
+        register(mcp, client)
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request) -> object:  # type: ignore[no-untyped-def]

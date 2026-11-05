@@ -10,105 +10,21 @@ unified :class:`ErrorResponse` envelope defined in
 
 from __future__ import annotations
 
-import logging
 import math
-import time
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..config import Settings
-from ..errors import (
-    BACKEND_INVALID_RESPONSE,
-    PetHospitalError,
-    validation_error,
-)
+from ..errors import validation_error
+from ..models import MedicalRecord, PetItem, Treatment
 from ..rest_client import PetHospitalClient
-
-logger = logging.getLogger("pet_hospital_mcp.tool.list_pets")
-
-
-# --- Allowed values (mirror the Go backend) ------------------------------
-
-SPECIES_VALUES: tuple[str, ...] = (
-    "犬", "猫", "兔", "鸟", "仓鼠", "爬宠", "其他",
+from ._common import (
+    ORDER_VALUES,
+    SORTBY_VALUES,
+    SPECIES_VALUES,
+    STATUS_VALUES,
+    run_tool,
 )
-STATUS_VALUES: tuple[str, ...] = (
-    "待就诊", "就诊中", "住院中", "已康复", "慢性病随访",
-)
-SORTBY_VALUES: tuple[str, ...] = (
-    "id", "name", "ownerName", "species", "doctor", "disease", "status",
-    "totalCost", "visitCount", "createdAt", "updatedAt",
-)
-ORDER_VALUES: tuple[str, ...] = ("asc", "desc")
-
-
-# --- Sub-models (mirror the Go model package) ----------------------------
-
-class Treatment(BaseModel):
-    """A single charge line on a pet (Go: ``model.Treatment``)."""
-
-    id: str
-    item: str = ""
-    category: str = ""
-    amount: float = 0.0
-    doctor: str | None = None
-    date: str = ""
-    note: str | None = None
-
-
-class MedicalRecord(BaseModel):
-    """A single visit record (Go: ``model.MedicalRecord``)."""
-
-    id: str
-    visitDate: str = ""
-    doctor: str = ""
-    diagnosis: str = ""
-    symptoms: str | None = None
-    treatment: str | None = None
-    prescription: list[str] | None = None
-    weightKg: float | None = None
-    temperature: float | None = None
-    followUp: str | None = None
-    charge: float = 0.0
-    createdAt: str = ""
-
-
-class PetItem(BaseModel):
-    """A single pet record (Go: ``model.Pet``).
-
-    ``records`` and ``charges`` are ``null`` when the Go side has a nil
-    slice (no history yet), and a list otherwise; both shapes are
-    accepted here.
-    """
-
-    id: str
-    name: str = ""
-    species: str = ""
-    breed: str | None = None
-    gender: str | None = None
-    ageMonths: int | None = None
-    color: str | None = None
-    chipNo: str | None = None
-
-    ownerName: str = ""
-    ownerPhone: str = ""
-    ownerAddr: str | None = None
-
-    doctor: str = ""
-    disease: str = ""
-    status: str = ""
-    allergy: str | None = None
-    note: str | None = None
-
-    records: list[MedicalRecord] | None = None
-    charges: list[Treatment] | None = None
-
-    totalCost: float = 0.0
-    visitCount: int = 0
-
-    createdAt: str = ""
-    updatedAt: str = ""
 
 
 # --- Input model ----------------------------------------------------------
@@ -186,7 +102,6 @@ async def execute_list_pets(
     turns into an ``is_error=True`` tool result carrying the unified
     error envelope as text content.
     """
-    start = time.perf_counter()
     # Cross-field validation that Pydantic cannot express declaratively.
     if filters.min is not None and filters.max is not None and filters.min > filters.max:
         raise validation_error(
@@ -195,67 +110,13 @@ async def execute_list_pets(
         )
 
     params = _to_query_params(filters)
-    logger.info(
-        "list_pets called",
-        extra={
-            "tool_name": "list_pets",
-            "params": _safe_params_for_log(filters),
-            "status": "started",
-            "duration_ms": 0,
-        },
+    return await run_tool(
+        tool_name=TOOL_NAME,
+        params=filters.model_dump(exclude_none=True),
+        op=lambda: client.list_pets(params),
+        parse=ListPetsSuccess.model_validate,
+        shape_label="list-pets",
     )
-    try:
-        data = await client.list_pets(params)
-    except PetHospitalError:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        logger.warning(
-            "list_pets failed",
-            extra={
-                "tool_name": "list_pets",
-                "params": _safe_params_for_log(filters),
-                "status": "error",
-                "duration_ms": duration_ms,
-            },
-        )
-        raise
-    except Exception as exc:
-        duration_ms = int((time.perf_counter() - start) * 1000)
-        logger.exception(
-            "list_pets internal error",
-            extra={
-                "tool_name": "list_pets",
-                "params": _safe_params_for_log(filters),
-                "status": "internal_error",
-                "duration_ms": duration_ms,
-            },
-        )
-        raise PetHospitalError(
-            "INTERNAL_ERROR",
-            "An unexpected error occurred while listing pets.",
-            {"error_type": type(exc).__name__},
-        ) from exc
-
-    try:
-        result = ListPetsSuccess.model_validate(data)
-    except Exception as exc:
-        raise PetHospitalError(
-            BACKEND_INVALID_RESPONSE,
-            "Backend response did not match the expected list-pets shape.",
-            {"data_keys": list(data.keys()) if isinstance(data, dict) else []},
-        ) from exc
-
-    duration_ms = int((time.perf_counter() - start) * 1000)
-    logger.info(
-        "list_pets succeeded",
-        extra={
-            "tool_name": "list_pets",
-            "params": _safe_params_for_log(filters),
-            "status": "ok",
-            "duration_ms": duration_ms,
-            "total": result.total,
-        },
-    )
-    return result
 
 
 # --- Helpers -------------------------------------------------------------
@@ -278,12 +139,6 @@ def _to_query_params(filters: ListPetsInput) -> dict[str, Any]:
     return out
 
 
-def _safe_params_for_log(filters: ListPetsInput) -> dict[str, Any]:
-    """Return a redaction-ready snapshot of the input for logging."""
-    from ..logging_config import redact
-    return redact(filters.model_dump(exclude_none=True))
-
-
 # --- Registration --------------------------------------------------------
 
 TOOL_NAME = "list_pets"
@@ -302,7 +157,7 @@ TOOL_DESCRIPTION = (
     "- status: one of " + ", ".join(STATUS_VALUES) + ".\n"
     "- min / max: total-cost range (non-negative, min <= max).\n"
     "- sortBy: one of " + ", ".join(SORTBY_VALUES) + ".\n"
-    "- order: 'asc' or 'desc'.\n"
+    "- order: one of " + ", ".join(ORDER_VALUES) + ".\n"
     "- page: 1-based page number (>= 1).\n"
     "- pageSize: items per page (1-500).\n\n"
     "Returns: an object with items (list of pet records, each including "

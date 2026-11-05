@@ -1,0 +1,15 @@
+# 凭据配置文件（含 API Key，禁止提交）
+Agent/xAgent/core/config.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

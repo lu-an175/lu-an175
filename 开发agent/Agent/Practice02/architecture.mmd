@@ -1,0 +1,95 @@
+%% chat-stream-tool-fileops.py 代码架构图
+%% Mermaid 格式
+
+graph TB
+    subgraph 入口层["🎯 入口层 Entry Layer"]
+        Main["main()<br/>交互式主程序"]
+        Demo["run_demo()<br/>演示测试"]
+        CallTool["call_tool(tool_name, **kwargs)<br/>工具分发器"]
+    end
+
+    subgraph 注册层["📋 注册层 Registry Layer"]
+        TOOLS["TOOLS 字典<br/>10 个工具元数据"]
+    end
+
+    subgraph 工具层["🔧 工具层 Tool Functions"]
+        direction LR
+        subgraph 查询类["查询类"]
+            F1["1. get_current_working_directory()"]
+            F2["2. list_directory(path)"]
+            F3["3. get_file_type(file_path)"]
+            F4["4. read_file(file_path)"]
+        end
+        subgraph 创建类["创建类"]
+            F5["5. create_file(file_path, content)"]
+            F7["7. create_directory(dir_path)"]
+        end
+        subgraph 修改类["修改类"]
+            F6["6. write_file(file_path, content, mode)"]
+            F10["10. rename_item(source_path, new_name)"]
+        end
+        subgraph 删除类["删除类"]
+            F8["8. delete_directory(dir_path, force)"]
+            F9["9. delete_file(file_path)"]
+        end
+    end
+
+    subgraph 系统依赖层["📦 系统依赖层 stdlib"]
+        OS["os<br/>路径/工作目录"]
+        PathLib["pathlib.Path<br/>面向对象路径"]
+        Shutil["shutil<br/>rmtree/move"]
+        Mimetypes["mimetypes<br/>MIME 类型识别"]
+        JSON["json<br/>结果序列化"]
+    end
+
+    Main --> CallTool
+    Demo --> CallTool
+    CallTool --> TOOLS
+    TOOLS -.映射.-> F1
+    TOOLS -.映射.-> F2
+    TOOLS -.映射.-> F3
+    TOOLS -.映射.-> F4
+    TOOLS -.映射.-> F5
+    TOOLS -.映射.-> F6
+    TOOLS -.映射.-> F7
+    TOOLS -.映射.-> F8
+    TOOLS -.映射.-> F9
+    TOOLS -.映射.-> F10
+
+    F1 --> OS
+    F2 --> PathLib
+    F3 --> PathLib
+    F3 --> Mimetypes
+    F4 --> PathLib
+    F5 --> PathLib
+    F6 --> PathLib
+    F7 --> PathLib
+    F8 --> PathLib
+    F8 --> Shutil
+    F8 --> OS
+    F9 --> PathLib
+    F10 --> PathLib
+    F10 --> OS
+    F10 --> Shutil
+
+    CallTool --> JSON
+    Main --> JSON
+    Demo --> JSON
+
+    subgraph 返回结构["📤 统一返回结构"]
+        Result["dict { success, data..., message/error }"]
+    end
+
+    F1 & F2 & F3 & F4 & F5 & F6 & F7 & F8 & F9 & F10 --> Result
+
+    classDef layerEntry fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
+    classDef layerRegistry fill:#fff4e1,stroke:#f57c00,stroke-width:2px
+    classDef layerTool fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef layerSys fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef layerResult fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+
+    class Main,Demo,CallTool layerEntry
+    class TOOLS layerRegistry
+    class F1,F2,F3,F4,F5,F6,F7,F8,F9,F10 layerTool
+    class OS,PathLib,Shutil,Mimetypes,JSON layerSys
+    class Result layerResult

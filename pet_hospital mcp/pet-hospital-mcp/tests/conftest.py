@@ -98,6 +98,61 @@ def make_go_error(status_code: int, message: str = "bad request") -> dict[str, A
     return {"code": status_code, "message": message, "data": None, "time": "2025-01-01T00:00:00Z"}
 
 
+def make_go_data(data: Any, *, status: int = 200, message: str = "ok") -> dict[str, Any]:
+    """Build a Go API success envelope around an arbitrary ``data`` payload.
+
+    Phase 2 endpoints return different shapes (a pet, a summary, stats),
+    so this helper keeps the envelope in one place instead of repeating
+    ``{"code": ..., "data": ...}`` in every handler.
+    """
+    return {"code": status, "message": message, "data": data, "time": "2025-01-01T00:00:00Z"}
+
+
+def make_summary(pet_id: str = "PET-000001", **overrides: Any) -> dict[str, Any]:
+    """Build a ``GET /pets/{id}/summary`` payload (Go: ``handleSummary``)."""
+    payload: dict[str, Any] = {
+        "id": pet_id,
+        "name": "小黄",
+        "species": "犬",
+        "ownerName": "张三",
+        "ownerPhone": "13800000000",
+        "doctor": "李医生",
+        "disease": "肠胃炎",
+        "status": "就诊中",
+        "totalCost": 560.0,
+        "visitCount": 2,
+        "chargeCount": 3,
+        "costByCategory": {"检查": 180.0, "药品": 380.0},
+        "costByDoctor": {"李医生": 560.0},
+        "maxSingleCharge": 380.0,
+        "avgCostPerVisit": 280.0,
+        "firstVisit": "2025-01-01",
+        "lastVisit": "2025-02-01",
+        "historyText": "2025-01-01 李医生 肠胃炎 补液",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def make_stats(top_spenders: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Build a ``GET /stats`` payload (Go: ``store.Stats``)."""
+    return {
+        "totalPets": 308,
+        "totalRecords": 512,
+        "totalCharges": 1200,
+        "totalRevenue": 98765.4,
+        "averageCost": 320.66,
+        "maxCost": 12000.0,
+        "bySpecies": {"犬": 120, "猫": 98},
+        "byStatus": {"待就诊": 40, "已康复": 200},
+        "byDoctor": {"李医生": 60, "王医生": 55},
+        "revenueByDoctor": {"李医生": 30000.0, "王医生": 25000.0},
+        "topSpenders": top_spenders if top_spenders is not None else [],
+        "logGarbagePct": 12.5,
+    }
+
+
+
 HandlerFn = Callable[[httpx.Request], httpx.Response]
 
 

@@ -16,6 +16,7 @@ from pet_hospital_mcp.errors import (
     BACKEND_API_ERROR,
     BACKEND_INVALID_RESPONSE,
     BACKEND_TIMEOUT,
+    NOT_FOUND,
     VALIDATION_ERROR,
     PetHospitalError,
 )
@@ -114,13 +115,26 @@ class TestBackendErrors:
         make_client: Callable[[httpx.AsyncBaseTransport], PetHospitalClient],
     ) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(404, json={"code": 404, "message": "not found"})
+            return httpx.Response(400, json={"code": 400, "message": "bad request"})
 
         client = make_client(make_mock_transport(handler))
         with pytest.raises(PetHospitalError) as exc_info:
             await execute_list_pets(client, ListPetsInput())
         await client.close()
         assert exc_info.value.code == BACKEND_API_ERROR
+
+    async def test_404_maps_to_not_found(
+        self,
+        make_client: Callable[[httpx.AsyncBaseTransport], PetHospitalClient],
+    ) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"code": 404, "message": "not found"})
+
+        client = make_client(make_mock_transport(handler))
+        with pytest.raises(PetHospitalError) as exc_info:
+            await execute_list_pets(client, ListPetsInput())
+        await client.close()
+        assert exc_info.value.code == NOT_FOUND
 
     async def test_timeout_maps_to_backend_timeout(
         self,

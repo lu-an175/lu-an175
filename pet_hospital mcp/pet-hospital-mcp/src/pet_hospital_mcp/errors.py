@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 # --- Error codes ---------------------------------------------------------
 
 VALIDATION_ERROR = "VALIDATION_ERROR"
+NOT_FOUND = "NOT_FOUND"
 BACKEND_TIMEOUT = "BACKEND_TIMEOUT"
 BACKEND_UNAVAILABLE = "BACKEND_UNAVAILABLE"
 BACKEND_API_ERROR = "BACKEND_API_ERROR"
@@ -37,6 +38,7 @@ INTERNAL_ERROR = "INTERNAL_ERROR"
 
 ALL_CODES: frozenset[str] = frozenset({
     VALIDATION_ERROR,
+    NOT_FOUND,
     BACKEND_TIMEOUT,
     BACKEND_UNAVAILABLE,
     BACKEND_API_ERROR,
@@ -108,6 +110,10 @@ def validation_error(message: str, details: dict[str, Any] | None = None) -> Pet
     return PetHospitalError(VALIDATION_ERROR, message, details)
 
 
+def not_found(message: str, details: dict[str, Any] | None = None) -> PetHospitalError:
+    return PetHospitalError(NOT_FOUND, message, details)
+
+
 def backend_timeout(message: str, details: dict[str, Any] | None = None) -> PetHospitalError:
     return PetHospitalError(BACKEND_TIMEOUT, message, details)
 
@@ -129,10 +135,10 @@ def internal_error(message: str, details: dict[str, Any] | None = None) -> PetHo
 
 
 __all__ = [
-    "VALIDATION_ERROR", "BACKEND_TIMEOUT", "BACKEND_UNAVAILABLE",
+    "VALIDATION_ERROR", "NOT_FOUND", "BACKEND_TIMEOUT", "BACKEND_UNAVAILABLE",
     "BACKEND_API_ERROR", "BACKEND_INVALID_RESPONSE", "INTERNAL_ERROR",
     "ALL_CODES",
     "ErrorPayload", "ErrorResponse", "PetHospitalError",
-    "validation_error", "backend_timeout", "backend_unavailable",
+    "validation_error", "not_found", "backend_timeout", "backend_unavailable",
     "backend_api_error", "backend_invalid_response", "internal_error",
 ]
